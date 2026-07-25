@@ -1,0 +1,47 @@
+# RHEL 9 golden image - kickstart template
+# @TOKENS@ are substituted at build time by scripts/build.sh.
+# This file is secret-free; the rendered .ks is git-ignored.
+
+text
+eula --agreed
+firstboot --disable
+reboot --eject
+
+lang en_US.UTF-8
+keyboard --vckeymap=fr
+timezone UTC --utc
+network --bootproto=dhcp --activate --hostname=localhost.localdomain
+
+# No GRUB password: the RHCSA root-reset task needs an interruptible menu
+bootloader --timeout=5
+
+# UEFI/GPT + LVM. Free space is left in the VG on purpose, so clones can
+# practise lvextend / lvcreate (EX200 storage tasks).
+clearpart --all --initlabel --disklabel=gpt
+part /boot/efi --fstype=efi   --size=600 --fsoptions="umask=0077,shortname=winnt"
+part /boot     --fstype=xfs   --size=1024
+part pv.01     --fstype=lvmpv --size=1 --grow
+volgroup vg_system pv.01
+logvol /    --vgname=vg_system --name=lv_root --fstype=xfs  --size=10240
+logvol swap --vgname=vg_system --name=lv_swap --fstype=swap --size=2048
+
+# Stock RHEL 9 security posture
+selinux --enforcing
+firewall --enabled --service=ssh
+services --enabled=sshd,chronyd
+
+rootpw --iscrypted @PW_HASH@
+user --name=labadmin --groups=wheel --iscrypted --password=@PW_HASH@
+sshkey --username=labadmin "@SSH_KEY@"
+
+%packages
+@^minimal-environment
+chrony
+%end
+
+%post --log=/root/ks-post.log
+# Anaconda leaves a copy of the kickstart with the password hashes in it
+shred -u /root/anaconda-ks.cfg /root/original-ks.cfg 2>/dev/null || true
+echo "RHEL 9 golden image - sealed, immutable. Do not boot: linked clones use it as backing file." \
+  > /etc/golden-image-release
+%end

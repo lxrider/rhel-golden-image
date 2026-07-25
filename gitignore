@@ -1,0 +1,14 @@
+# Rendered kickstart (contains password hashes)
+kickstart/*.ks
+kickstart/*.cfg
+
+# Secrets
+*.key
+*.pem
+id_*
+!*.pub
+
+# Heavy artefacts
+*.qcow2
+*.iso
+*.log
