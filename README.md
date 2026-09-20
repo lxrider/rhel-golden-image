@@ -17,7 +17,7 @@ flowchart TD
     E --> F["RHEL 9 golden image"]
 ```
 
-This repository is only responsible for the **image lifecycle**.
+This repository is responsible for the **image lifecycle**.
 
 The topology, VM roles and lab configuration live in
 [linux-platform-engineering](https://github.com/lxrider/linux-platform-engineering).
@@ -37,10 +37,12 @@ configuration, I know exactly where my lab started from.
 
 The image intentionally stays close to a clean RHEL installation.
 
-Hardening and role-specific configuration belong later in the lifecycle, where
+Hardening and role-specific configuration come later in the lifecycle, where
 their purpose and impact remain visible.
 
-## Requirements (KVM host, Ubuntu 24.04)
+## Requirements
+
+KVM host running Ubuntu Server 24.04:
 
 ```bash
 sudo apt install -y virtinst libvirt-daemon-system ovmf libguestfs-tools qemu-utils
@@ -48,63 +50,168 @@ sudo apt install -y virtinst libvirt-daemon-system ovmf libguestfs-tools qemu-ut
 
 ## Usage
 
-**1. Check the ISO.** A RHEL 9 **Binary DVD** is expected at
-`/var/lib/libvirt/boot/rhel9.iso` (override with `ISO=/path/to.iso`).
-It must contain the package trees — a Boot ISO will not do:
+### 1. Check the ISO
+
+A RHEL 9 **Binary DVD** is expected at:
+
+```text
+/var/lib/libvirt/boot/rhel9.iso
+```
+
+You can override it with:
+
+```bash
+ISO=/path/to/rhel9.iso
+```
+
+The image must contain the package trees. A Boot ISO is not enough.
 
 ```bash
 sudo mkdir -p /mnt/iso
 sudo mount -o loop,ro /var/lib/libvirt/boot/rhel9.iso /mnt/iso
-ls /mnt/iso            # expected: BaseOS/  AppStream/
+
+ls /mnt/iso
+# expected: BaseOS/  AppStream/
+
 sudo umount /mnt/iso
 ```
 
-**2. Build.** Prompts once for a password, then installs unattended
-(10-20 min). The VM powers off when done:
+### 2. Build
+
+The build script asks once for a password, then runs the installation unattended.
 
 ```bash
 chmod +x scripts/*.sh
 ./scripts/build.sh
 ```
 
-Follow it from another shell with `sudo virsh console rhel9-golden`
-(exit: `Ctrl+]`).
+The installation usually takes around 10 to 20 minutes.
 
-**3. Seal.** De-templatizes, compacts and locks the image:
+The VM powers off automatically when the build is complete.
+
+You can follow the installation from another shell:
+
+```bash
+sudo virsh console rhel9-golden
+```
+
+Exit the console with:
+
+```text
+Ctrl+]
+```
+
+### 3. Seal
+
+Once the installation is validated:
 
 ```bash
 ./scripts/seal.sh
 ```
 
-> Once sealed, the image is **never booted**: linked clones depend on it as
-> a read-only backing file.
+The sealing step prepares the VM to become a reusable reference image,
+cleans machine-specific state and compacts the disk.
+
+> Once sealed, the image is **never booted directly again**.
+> Linked clones depend on it as a read-only backing file.
 
 ## What you get
 
-Admin account `labadmin` (group `wheel`), root password set to the same
-value, both from the prompt at build time. SSH key of the building user is
-installed for `labadmin`.
+The image contains an administrative account:
+
+```text
+labadmin
+```
+
+It belongs to the `wheel` group.
+
+The root account and `labadmin` use the password provided at build time.
+
+The SSH public key of the user running the build is installed for `labadmin`.
+
+Disk layout:
 
 ```text
 /boot/efi    600M   vfat
 /boot       1024M   xfs
-vg_system          lv_root  10G  xfs
-                   lv_swap   2G  swap
-                   ~8G left unallocated, on purpose
+
+vg_system
+    |
+    +-- lv_root   10G   xfs
+    |
+    +-- lv_swap    2G   swap
+    |
+    +-- ~8G left unallocated intentionally
 ```
 
 ## Design notes
 
-- **DVD-only, unregistered** — reproducible, no credentials in the repo.
-- **UEFI / GPT** — Red Hat's recommendation for new RHEL 9 deployments;
-  boot tasks (`grubby`, `rd.break`) behave identically to BIOS.
-- **Stock posture** — SELinux enforcing, firewalld on, no GRUB password
-  (required for the RHCSA root-password reset task).
-- **Free space left in the VG** — room to practise `lvextend` / `lvcreate`.
-- **Nothing pre-configured** that the EX200 expects you to configure.
+### DVD-only build
+
+The installation uses the RHEL Binary DVD and does not require registration.
+
+This keeps the build reproducible and avoids storing Red Hat credentials in
+the repository.
+
+### UEFI / GPT
+
+The image uses UEFI and GPT.
+
+Boot-related exercises such as `grubby` and `rd.break` remain available for
+practice.
+
+### Stock security posture
+
+The image stays close to a default RHEL installation:
+
+- SELinux enforcing
+- firewalld enabled
+- no GRUB password
+
+The last point is intentional because root password recovery is part of the
+RHCSA practice environment.
+
+### Free space in the volume group
+
+Some space is intentionally left unused in `vg_system`.
+
+This gives me room to practise:
+
+```text
+lvextend
+lvcreate
+filesystem growth
+```
+
+without having to modify the virtual disk first.
+
+### Keep the image simple
+
+Nothing is pre-configured that I am supposed to learn or configure myself.
+
+The golden image gives me a clean starting point.
+
+The clones are where the work happens.
 
 ## Secrets
 
-The repo holds the **template only**. The password hash is generated at build
-time into a temp file (mode 0600) that is deleted on exit, and Anaconda's
-`/root/anaconda-ks.cfg` is shredded in `%post`. Never commit a rendered `.ks`.
+No passwords or rendered Kickstart files are stored in the repository.
+
+The repository contains the **Kickstart template only**.
+
+During the build:
+
+1. the password hash is generated into a temporary file
+2. the temporary file is created with mode `0600`
+3. the generated file is deleted automatically when the script exits
+4. Anaconda's `/root/anaconda-ks.cfg` is shredded during `%post`
+
+Never commit a rendered `.ks` file containing credentials.
+
+## Related project
+
+This image is used by:
+
+[linux-platform-engineering](https://github.com/lxrider/linux-platform-engineering)
+
+## Build it once. Understand it. Rebuild it whenever you need.
