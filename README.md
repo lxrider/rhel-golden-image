@@ -1,10 +1,44 @@
-# rhel-golden-image
+# RHEL Golden Image
 
-Builds a single sealed **RHEL 9 golden image** with Kickstart, used as the
-backing file for the linked clones of the lab (RHCSA / EX200 practice).
+A reproducible **RHEL 9 golden image** built with Kickstart for my
+[Linux Platform Engineering](https://github.com/lxrider/linux-platform-engineering) lab.
 
-Scope: this repo builds and seals the image. Cloning, topology and node
-roles belong to `linux-lab`.
+The goal is simple: build a clean reference image that can be rebuilt,
+validated and reused as the backing image for disposable QCOW2 clones.
+
+## What this repository does
+
+```mermaid
+flowchart TD
+    A["RHEL 9 installation media"] --> B["Kickstart"]
+    B --> C["Unattended installation"]
+    C --> D["Image preparation"]
+    D --> E["Sealing"]
+    E --> F["RHEL 9 golden image"]
+```
+
+This repository is only responsible for the **image lifecycle**.
+
+The topology, VM roles and lab configuration live in
+[linux-platform-engineering](https://github.com/lxrider/linux-platform-engineering).
+
+I prefer keeping those responsibilities separate:
+
+- this repository builds the reference image
+- the platform repository uses it
+- configuration and experiments happen on disposable clones
+
+## Why a golden image?
+
+Mostly because rebuilding is more interesting than repairing configuration drift :)
+
+If the reference image can be created again from documented and version-controlled
+configuration, I know exactly where my lab started from.
+
+The image intentionally stays close to a clean RHEL installation.
+
+Hardening and role-specific configuration belong later in the lifecycle, where
+their purpose and impact remain visible.
 
 ## Requirements (KVM host, Ubuntu 24.04)
 
