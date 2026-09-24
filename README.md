@@ -1,4 +1,4 @@
-# RHEL Golden Image
+# RHEL Golden Image 💾
 
 A reproducible **RHEL 9 golden image** built with Kickstart for my
 [Linux Platform Engineering](https://github.com/lxrider/linux-platform-engineering) lab.
